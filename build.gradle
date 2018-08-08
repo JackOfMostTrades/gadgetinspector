@@ -1,0 +1,41 @@
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.3'
+    }
+}
+
+apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'java'
+apply plugin: 'application'
+
+mainClassName = 'gadgetinspector.GadgetInspector'
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    compile "org.ow2.asm:asm:6.2"
+    compile "org.ow2.asm:asm-commons:6.2"
+    compile "com.google.guava:guava:24.1-jre"
+    compile 'org.slf4j:slf4j-api:1.7.25'
+    compile 'org.slf4j:slf4j-log4j12:1.7.25'
+
+    if (project.hasProperty("inspectGroup")) {
+        compile "${project.inspectGroup}:${project.inspectName}:${project.inspectVersion}"
+    }
+}
+
+// The runInspect task will add a library as a dependency (thus pulling in all of its transitive dependencies) and run
+// an analysis on the resulting classpath. Example:
+//   ./gradlew -PinspectGroup=commons-collections -PinspectName=commons-collections -PinspectVersion=3.1 -PinspectConfig=jserial runInspect
+if (project.hasProperty("inspectConfig")) {
+    task runInspect(type: JavaExec) {
+        classpath = sourceSets.main.runtimeClasspath
+        main = "gadgetinspector.GadgetInspector"
+        args = ["--config", project.inspectConfig]
+    }
+}
