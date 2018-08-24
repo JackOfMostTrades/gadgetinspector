@@ -74,6 +74,7 @@ public class GadgetInspector {
             LOGGER.info("Using classpath: " + Arrays.toString(jarPaths));
             classLoader = Util.getJarClassLoader(jarPaths);
         }
+        final ClassResourceEnumerator classResourceEnumerator = new ClassResourceEnumerator(classLoader);
 
         if (!resume) {
             // Delete all existing dat files
@@ -92,21 +93,21 @@ public class GadgetInspector {
                 || !Files.exists(Paths.get("inheritanceMap.dat"))) {
             LOGGER.info("Running method discovery...");
             MethodDiscovery methodDiscovery = new MethodDiscovery();
-            methodDiscovery.discover(classLoader);
+            methodDiscovery.discover(classResourceEnumerator);
             methodDiscovery.save();
         }
 
         if (!Files.exists(Paths.get("passthrough.dat"))) {
             LOGGER.info("Analyzing methods for passthrough dataflow...");
             PassthroughDiscovery passthroughDiscovery = new PassthroughDiscovery();
-            passthroughDiscovery.discover(classLoader);
+            passthroughDiscovery.discover(classResourceEnumerator);
             passthroughDiscovery.save();
         }
 
         if (!Files.exists(Paths.get("callgraph.dat"))) {
             LOGGER.info("Analyzing methods in order to build a call graph...");
             CallGraphDiscovery callGraphDiscovery = new CallGraphDiscovery();
-            callGraphDiscovery.discover(classLoader);
+            callGraphDiscovery.discover(classResourceEnumerator);
             callGraphDiscovery.save();
         }
 

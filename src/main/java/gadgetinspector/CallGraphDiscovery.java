@@ -1,6 +1,5 @@
 package gadgetinspector;
 
-import com.google.common.reflect.ClassPath;
 import gadgetinspector.data.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.JSRInlinerAdapter;
@@ -19,19 +18,20 @@ public class CallGraphDiscovery {
 
     private final Set<GraphCall> discoveredCalls = new HashSet<>();
 
-    public void discover(final ClassLoader classLoader) throws IOException {
+    public void discover(final ClassResourceEnumerator classResourceEnumerator) throws IOException {
         Map<ClassReference.Handle, ClassReference> classMap = DataLoader.loadClasses();
         InheritanceMap inheritanceMap = InheritanceMap.load();
         Map<MethodReference.Handle, Set<Integer>> passthroughDataflow = PassthroughDiscovery.load();
 
-        for (ClassPath.ClassInfo classInfo : ClassPath.from(classLoader).getAllClasses()) {
-            InputStream in = classLoader.getResourceAsStream(classInfo.getResourceName());
-            ClassReader cr = new ClassReader(in);
-            try {
-                cr.accept(new ModelGeneratorClassVisitor(classMap, inheritanceMap, passthroughDataflow, Opcodes.ASM6),
-                        ClassReader.EXPAND_FRAMES);
-            } catch (Exception e) {
-                LOGGER.error("Error analyzing: " + classInfo.getName(), e);
+        for (ClassResourceEnumerator.ClassResource classResource : classResourceEnumerator.getAllClasses()) {
+            try (InputStream in = classResource.getInputStream()) {
+                ClassReader cr = new ClassReader(in);
+                try {
+                    cr.accept(new ModelGeneratorClassVisitor(classMap, inheritanceMap, passthroughDataflow, Opcodes.ASM6),
+                            ClassReader.EXPAND_FRAMES);
+                } catch (Exception e) {
+                    LOGGER.error("Error analyzing: " + classResource.getName(), e);
+                }
             }
         }
     }
@@ -247,7 +247,7 @@ public class CallGraphDiscovery {
         ClassLoader classLoader = Util.getWarClassLoader(Paths.get(args[0]));
 
         CallGraphDiscovery callGraphDiscovery = new CallGraphDiscovery();
-        callGraphDiscovery.discover(classLoader);
+        callGraphDiscovery.discover(new ClassResourceEnumerator(classLoader));
         callGraphDiscovery.save();
     }
 }

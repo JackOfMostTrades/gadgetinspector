@@ -1,6 +1,5 @@
 package gadgetinspector;
 
-import com.google.common.reflect.ClassPath;
 import gadgetinspector.data.ClassReference;
 import gadgetinspector.data.DataLoader;
 import gadgetinspector.data.InheritanceDeriver;
@@ -36,14 +35,15 @@ public class MethodDiscovery {
         InheritanceDeriver.derive(classMap).save();
     }
 
-    public void discover(final ClassLoader classLoader) throws Exception {
-        for (ClassPath.ClassInfo classInfo : ClassPath.from(classLoader).getAllClasses()) {
-            InputStream in = classLoader.getResourceAsStream(classInfo.getResourceName());
-            ClassReader cr = new ClassReader(in);
-            try {
-                cr.accept(new MethodDiscoveryClassVisitor(), ClassReader.EXPAND_FRAMES);
-            } catch (Exception e) {
-                LOGGER.error("Exception analyzing: " + classInfo.getName(), e);
+    public void discover(final ClassResourceEnumerator classResourceEnumerator) throws Exception {
+        for (ClassResourceEnumerator.ClassResource classResource : classResourceEnumerator.getAllClasses()) {
+            try (InputStream in = classResource.getInputStream()) {
+                ClassReader cr = new ClassReader(in);
+                try {
+                    cr.accept(new MethodDiscoveryClassVisitor(), ClassReader.EXPAND_FRAMES);
+                } catch (Exception e) {
+                    LOGGER.error("Exception analyzing: " + classResource.getName(), e);
+                }
             }
         }
     }
@@ -119,7 +119,7 @@ public class MethodDiscovery {
         ClassLoader classLoader = Util.getWarClassLoader(Paths.get(args[0]));
 
         MethodDiscovery methodDiscovery = new MethodDiscovery();
-        methodDiscovery.discover(classLoader);
+        methodDiscovery.discover(new ClassResourceEnumerator(classLoader));
         methodDiscovery.save();
     }
 }

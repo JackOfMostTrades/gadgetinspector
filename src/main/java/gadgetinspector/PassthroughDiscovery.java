@@ -1,6 +1,5 @@
 package gadgetinspector;
 
-import com.google.common.reflect.ClassPath;
 import gadgetinspector.data.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.JSRInlinerAdapter;
@@ -19,25 +18,30 @@ public class PassthroughDiscovery {
     private final Map<MethodReference.Handle, Set<MethodReference.Handle>> methodCalls = new HashMap<>();
     private Map<MethodReference.Handle, Set<Integer>> passthroughDataflow;
 
-    public void discover(final ClassLoader classLoader) throws IOException {
+    public void discover(final ClassResourceEnumerator classResourceEnumerator) throws IOException {
         Map<ClassReference.Handle, ClassReference> classMap = DataLoader.loadClasses();
         InheritanceMap inheritanceMap = InheritanceMap.load();
 
-        discoverMethodCalls(classLoader);
+        Map<String, ClassResourceEnumerator.ClassResource> classResourceByName = discoverMethodCalls(classResourceEnumerator);
         List<MethodReference.Handle> sortedMethods = topologicallySortMethodCalls();
-        passthroughDataflow = calculatePassthroughDataflow(classLoader, classMap, inheritanceMap, sortedMethods);
+        passthroughDataflow = calculatePassthroughDataflow(classResourceByName, classMap, inheritanceMap, sortedMethods);
     }
 
-    private void discoverMethodCalls(final ClassLoader classLoader) throws IOException {
-        for (ClassPath.ClassInfo classInfo : ClassPath.from(classLoader).getAllClasses()) {
-            InputStream in = classLoader.getResourceAsStream(classInfo.getResourceName());
-            ClassReader cr = new ClassReader(in);
-            try {
-                cr.accept(new MethodCallDiscoveryClassVisitor(Opcodes.ASM6), ClassReader.EXPAND_FRAMES);
-            } catch (Exception e) {
-                LOGGER.error("Error analyzing: " + classInfo.getName(), e);
+    private Map<String, ClassResourceEnumerator.ClassResource> discoverMethodCalls(final ClassResourceEnumerator classResourceEnumerator) throws IOException {
+        Map<String, ClassResourceEnumerator.ClassResource> classResourcesByName = new HashMap<>();
+        for (ClassResourceEnumerator.ClassResource classResource : classResourceEnumerator.getAllClasses()) {
+            try (InputStream in = classResource.getInputStream()) {
+                ClassReader cr = new ClassReader(in);
+                try {
+                    MethodCallDiscoveryClassVisitor visitor = new MethodCallDiscoveryClassVisitor(Opcodes.ASM6);
+                    cr.accept(visitor, ClassReader.EXPAND_FRAMES);
+                    classResourcesByName.put(visitor.getName(), classResource);
+                } catch (Exception e) {
+                    LOGGER.error("Error analyzing: " + classResource.getName(), e);
+                }
             }
         }
+        return classResourcesByName;
     }
 
     private List<MethodReference.Handle> topologicallySortMethodCalls() {
@@ -60,7 +64,7 @@ public class PassthroughDiscovery {
         return sortedMethods;
     }
 
-    private static Map<MethodReference.Handle, Set<Integer>> calculatePassthroughDataflow(final ClassLoader classLoader,
+    private static Map<MethodReference.Handle, Set<Integer>> calculatePassthroughDataflow(Map<String, ClassResourceEnumerator.ClassResource> classResourceByName,
                                                                                           Map<ClassReference.Handle, ClassReference> classMap,
                                                                                           InheritanceMap inheritanceMap,
                                                                                           List<MethodReference.Handle> sortedMethods) throws IOException {
@@ -69,7 +73,8 @@ public class PassthroughDiscovery {
             if (method.getName().equals("<clinit>")) {
                 continue;
             }
-            try (InputStream inputStream = classLoader.getResourceAsStream(method.getClassReference().getName() + ".class")) {
+            ClassResourceEnumerator.ClassResource classResource = classResourceByName.get(method.getClassReference().getName());
+            try (InputStream inputStream = classResource.getInputStream()) {
                 ClassReader cr = new ClassReader(inputStream);
                 try {
                     PassthroughDataflowClassVisitor cv = new PassthroughDataflowClassVisitor(classMap, inheritanceMap,
@@ -91,13 +96,20 @@ public class PassthroughDiscovery {
             super(api);
         }
 
-        private String name;
+        private String name = null;
 
         @Override
         public void visit(int version, int access, String name, String signature,
                           String superName, String[] interfaces) {
             super.visit(version, access, name, signature, superName, interfaces);
+            if (this.name != null) {
+                throw new IllegalStateException("ClassVisitor already visited a class!");
+            }
             this.name = name;
+        }
+
+        public String getName() {
+            return name;
         }
 
         @Override
@@ -438,7 +450,7 @@ public class PassthroughDiscovery {
         ClassLoader classLoader = Util.getWarClassLoader(Paths.get(args[0]));
 
         PassthroughDiscovery passthroughDiscovery = new PassthroughDiscovery();
-        passthroughDiscovery.discover(classLoader);
+        passthroughDiscovery.discover(new ClassResourceEnumerator(classLoader));
         passthroughDiscovery.save();
     }
 }

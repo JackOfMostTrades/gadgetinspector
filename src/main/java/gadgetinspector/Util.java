@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.JarURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -56,7 +55,6 @@ public class Util {
         }
 
         final List<URL> classPathUrls = new ArrayList<>();
-        classPathUrls.add(getRuntimeUrl());
         classPathUrls.add(tmpDir.resolve("WEB-INF/classes").toUri().toURL());
         Files.list(tmpDir.resolve("WEB-INF/lib")).forEach(p -> {
             try {
@@ -71,7 +69,6 @@ public class Util {
 
     public static ClassLoader getJarClassLoader(Path ... jarPaths) throws IOException {
         final List<URL> classPathUrls = new ArrayList<>(jarPaths.length);
-        classPathUrls.add(getRuntimeUrl());
         for (Path jarPath : jarPaths) {
             if (!Files.exists(jarPath) || Files.isDirectory(jarPath)) {
                 throw new IllegalArgumentException("Path \"" + jarPath + "\" is not a path to a file.");
@@ -80,14 +77,6 @@ public class Util {
         }
         URLClassLoader classLoader = new URLClassLoader(classPathUrls.toArray(new URL[classPathUrls.size()]));
         return classLoader;
-    }
-
-    private static URL getRuntimeUrl() throws IOException {
-        // A hacky way to get the current JRE's rt.jar. Depending on the class loader, rt.jar may be in the
-        // bootstrap classloader so all the JDK classes will be excluded from classpath scanning with this!
-        URL stringClassUrl = Object.class.getResource("String.class");
-        final JarURLConnection connection = (JarURLConnection) stringClassUrl.openConnection();
-        return connection.getJarFileURL();
     }
 
     /**
