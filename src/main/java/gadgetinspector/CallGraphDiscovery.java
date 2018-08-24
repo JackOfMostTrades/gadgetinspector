@@ -1,5 +1,7 @@
 package gadgetinspector;
 
+import gadgetinspector.config.GIConfig;
+import gadgetinspector.config.JavaDeserializationConfig;
 import gadgetinspector.data.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.JSRInlinerAdapter;
@@ -18,16 +20,19 @@ public class CallGraphDiscovery {
 
     private final Set<GraphCall> discoveredCalls = new HashSet<>();
 
-    public void discover(final ClassResourceEnumerator classResourceEnumerator) throws IOException {
+    public void discover(final ClassResourceEnumerator classResourceEnumerator, GIConfig config) throws IOException {
+        Map<MethodReference.Handle, MethodReference> methodMap = DataLoader.loadMethods();
         Map<ClassReference.Handle, ClassReference> classMap = DataLoader.loadClasses();
         InheritanceMap inheritanceMap = InheritanceMap.load();
         Map<MethodReference.Handle, Set<Integer>> passthroughDataflow = PassthroughDiscovery.load();
+
+        SerializableDecider serializableDecider = config.getSerializableDecider(methodMap, inheritanceMap);
 
         for (ClassResourceEnumerator.ClassResource classResource : classResourceEnumerator.getAllClasses()) {
             try (InputStream in = classResource.getInputStream()) {
                 ClassReader cr = new ClassReader(in);
                 try {
-                    cr.accept(new ModelGeneratorClassVisitor(classMap, inheritanceMap, passthroughDataflow, Opcodes.ASM6),
+                    cr.accept(new ModelGeneratorClassVisitor(classMap, inheritanceMap, passthroughDataflow, serializableDecider, Opcodes.ASM6),
                             ClassReader.EXPAND_FRAMES);
                 } catch (Exception e) {
                     LOGGER.error("Error analyzing: " + classResource.getName(), e);
@@ -45,15 +50,17 @@ public class CallGraphDiscovery {
         private final Map<ClassReference.Handle, ClassReference> classMap;
         private final InheritanceMap inheritanceMap;
         private final Map<MethodReference.Handle, Set<Integer>> passthroughDataflow;
+        private final SerializableDecider serializableDecider;
 
         public ModelGeneratorClassVisitor(Map<ClassReference.Handle, ClassReference> classMap,
                                           InheritanceMap inheritanceMap,
                                           Map<MethodReference.Handle, Set<Integer>> passthroughDataflow,
-                                          int api) {
+                                          SerializableDecider serializableDecider, int api) {
             super(api);
             this.classMap = classMap;
             this.inheritanceMap = inheritanceMap;
             this.passthroughDataflow = passthroughDataflow;
+            this.serializableDecider = serializableDecider;
         }
 
         private String name;
@@ -76,7 +83,7 @@ public class CallGraphDiscovery {
                                          String signature, String[] exceptions) {
             MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
             ModelGeneratorMethodVisitor modelGeneratorMethodVisitor = new ModelGeneratorMethodVisitor(classMap,
-                    inheritanceMap, passthroughDataflow, api, mv, this.name, access, name, desc, signature, exceptions);
+                    inheritanceMap, passthroughDataflow, serializableDecider, api, mv, this.name, access, name, desc, signature, exceptions);
 
             return new JSRInlinerAdapter(modelGeneratorMethodVisitor, access, name, desc, signature, exceptions);
         }
@@ -103,6 +110,7 @@ public class CallGraphDiscovery {
 
         private final Map<ClassReference.Handle, ClassReference> classMap;
         private final InheritanceMap inheritanceMap;
+        private final SerializableDecider serializableDecider;
         private final String owner;
         private final int access;
         private final String name;
@@ -111,12 +119,13 @@ public class CallGraphDiscovery {
         public ModelGeneratorMethodVisitor(Map<ClassReference.Handle, ClassReference> classMap,
                                            InheritanceMap inheritanceMap,
                                            Map<MethodReference.Handle, Set<Integer>> passthroughDataflow,
-                                           final int api, final MethodVisitor mv,
+                                           SerializableDecider serializableDecider, final int api, final MethodVisitor mv,
                                            final String owner, int access, String name, String desc, String signature,
                                            String[] exceptions) {
             super(inheritanceMap, passthroughDataflow, api, mv, owner, access, name, desc, signature, exceptions);
             this.classMap = classMap;
             this.inheritanceMap = inheritanceMap;
+            this.serializableDecider = serializableDecider;
             this.owner = owner;
             this.access = access;
             this.name = name;
@@ -150,21 +159,27 @@ public class CallGraphDiscovery {
                 case Opcodes.PUTSTATIC:
                     break;
                 case Opcodes.GETFIELD:
-                    int typeSize = Type.getType(desc).getSize();
-                    if (typeSize == 1) {
+                    Type type = Type.getType(desc);
+                    if (type.getSize() == 1) {
                         Boolean isTransient = null;
-                        ClassReference clazz = classMap.get(new ClassReference.Handle(owner));
-                        while (clazz != null) {
-                            for (ClassReference.Member member : clazz.getMembers()) {
-                                if (member.getName().equals(name)) {
-                                    isTransient = (member.getModifiers() & Opcodes.ACC_TRANSIENT) != 0;
+
+                        // If a field type could not possibly be serialized, it's effectively transient
+                        if (!couldBeSerialized(serializableDecider, inheritanceMap, new ClassReference.Handle(type.getInternalName()))) {
+                            isTransient = Boolean.TRUE;
+                        } else {
+                            ClassReference clazz = classMap.get(new ClassReference.Handle(owner));
+                            while (clazz != null) {
+                                for (ClassReference.Member member : clazz.getMembers()) {
+                                    if (member.getName().equals(name)) {
+                                        isTransient = (member.getModifiers() & Opcodes.ACC_TRANSIENT) != 0;
+                                        break;
+                                    }
+                                }
+                                if (isTransient != null) {
                                     break;
                                 }
+                                clazz = classMap.get(new ClassReference.Handle(clazz.getSuperClass()));
                             }
-                            if (isTransient != null) {
-                                break;
-                            }
-                            clazz = classMap.get(new ClassReference.Handle(clazz.getSuperClass()));
                         }
 
                         Set<String> newTaint = new HashSet<>();
@@ -247,7 +262,7 @@ public class CallGraphDiscovery {
         ClassLoader classLoader = Util.getWarClassLoader(Paths.get(args[0]));
 
         CallGraphDiscovery callGraphDiscovery = new CallGraphDiscovery();
-        callGraphDiscovery.discover(new ClassResourceEnumerator(classLoader));
+        callGraphDiscovery.discover(new ClassResourceEnumerator(classLoader), new JavaDeserializationConfig());
         callGraphDiscovery.save();
     }
 }

@@ -927,4 +927,19 @@ public class TaintTrackingMethodVisitor<T> extends MethodVisitor {
         values.addAll(possibleValues);
         savedVariableState.localVars.set(index, values);
     }
+
+    protected static final boolean couldBeSerialized(SerializableDecider serializableDecider, InheritanceMap inheritanceMap, ClassReference.Handle clazz) {
+        if (Boolean.TRUE.equals(serializableDecider.apply(clazz))) {
+            return true;
+        }
+        Set<ClassReference.Handle> subClasses = inheritanceMap.getSubClasses(clazz);
+        if (subClasses != null) {
+            for (ClassReference.Handle subClass : subClasses) {
+                if (Boolean.TRUE.equals(serializableDecider.apply(subClass))) {
+                    return true;
+                }
+            }
+    }
+        return false;
+    }
 }

@@ -1,6 +1,7 @@
 package gadgetinspector.config;
 
 import gadgetinspector.ImplementationFinder;
+import gadgetinspector.SerializableDecider;
 import gadgetinspector.SourceDiscovery;
 import gadgetinspector.data.InheritanceMap;
 import gadgetinspector.data.MethodReference;
@@ -17,11 +18,15 @@ public class XstreamDeserializationConfig implements GIConfig {
         return "xstream";
     }
 
+    public SerializableDecider getSerializableDecider(Map<MethodReference.Handle, MethodReference> methodMap, InheritanceMap inheritanceMap) {
+        return new XstreamSerializableDecider();
+    }
+
     @Override
     public ImplementationFinder getImplementationFinder(Map<MethodReference.Handle, MethodReference> methodMap,
                                                         Map<MethodReference.Handle, Set<MethodReference.Handle>> methodImplMap,
                                                         InheritanceMap inheritanceMap) {
-        return new SimpleImplementationFinder(new XstreamSerializableDecider(), methodImplMap);
+        return new SimpleImplementationFinder(getSerializableDecider(methodMap, inheritanceMap), methodImplMap);
     }
 
     @Override

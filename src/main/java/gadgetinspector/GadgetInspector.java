@@ -100,14 +100,14 @@ public class GadgetInspector {
         if (!Files.exists(Paths.get("passthrough.dat"))) {
             LOGGER.info("Analyzing methods for passthrough dataflow...");
             PassthroughDiscovery passthroughDiscovery = new PassthroughDiscovery();
-            passthroughDiscovery.discover(classResourceEnumerator);
+            passthroughDiscovery.discover(classResourceEnumerator, config);
             passthroughDiscovery.save();
         }
 
         if (!Files.exists(Paths.get("callgraph.dat"))) {
             LOGGER.info("Analyzing methods in order to build a call graph...");
             CallGraphDiscovery callGraphDiscovery = new CallGraphDiscovery();
-            callGraphDiscovery.discover(classResourceEnumerator);
+            callGraphDiscovery.discover(classResourceEnumerator, config);
             callGraphDiscovery.save();
         }
 

@@ -1,5 +1,7 @@
 package gadgetinspector;
 
+import gadgetinspector.config.GIConfig;
+import gadgetinspector.config.JavaDeserializationConfig;
 import gadgetinspector.data.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.JSRInlinerAdapter;
@@ -18,13 +20,15 @@ public class PassthroughDiscovery {
     private final Map<MethodReference.Handle, Set<MethodReference.Handle>> methodCalls = new HashMap<>();
     private Map<MethodReference.Handle, Set<Integer>> passthroughDataflow;
 
-    public void discover(final ClassResourceEnumerator classResourceEnumerator) throws IOException {
+    public void discover(final ClassResourceEnumerator classResourceEnumerator, final GIConfig config) throws IOException {
+        Map<MethodReference.Handle, MethodReference> methodMap = DataLoader.loadMethods();
         Map<ClassReference.Handle, ClassReference> classMap = DataLoader.loadClasses();
         InheritanceMap inheritanceMap = InheritanceMap.load();
 
         Map<String, ClassResourceEnumerator.ClassResource> classResourceByName = discoverMethodCalls(classResourceEnumerator);
         List<MethodReference.Handle> sortedMethods = topologicallySortMethodCalls();
-        passthroughDataflow = calculatePassthroughDataflow(classResourceByName, classMap, inheritanceMap, sortedMethods);
+        passthroughDataflow = calculatePassthroughDataflow(classResourceByName, classMap, inheritanceMap, sortedMethods,
+                config.getSerializableDecider(methodMap, inheritanceMap));
     }
 
     private Map<String, ClassResourceEnumerator.ClassResource> discoverMethodCalls(final ClassResourceEnumerator classResourceEnumerator) throws IOException {
@@ -67,7 +71,8 @@ public class PassthroughDiscovery {
     private static Map<MethodReference.Handle, Set<Integer>> calculatePassthroughDataflow(Map<String, ClassResourceEnumerator.ClassResource> classResourceByName,
                                                                                           Map<ClassReference.Handle, ClassReference> classMap,
                                                                                           InheritanceMap inheritanceMap,
-                                                                                          List<MethodReference.Handle> sortedMethods) throws IOException {
+                                                                                          List<MethodReference.Handle> sortedMethods,
+                                                                                          SerializableDecider serializableDecider) throws IOException {
         final Map<MethodReference.Handle, Set<Integer>> passthroughDataflow = new HashMap<>();
         for (MethodReference.Handle method : sortedMethods) {
             if (method.getName().equals("<clinit>")) {
@@ -78,7 +83,7 @@ public class PassthroughDiscovery {
                 ClassReader cr = new ClassReader(inputStream);
                 try {
                     PassthroughDataflowClassVisitor cv = new PassthroughDataflowClassVisitor(classMap, inheritanceMap,
-                            passthroughDataflow, Opcodes.ASM6, method);
+                            passthroughDataflow, serializableDecider, Opcodes.ASM6, method);
                     cr.accept(cv, ClassReader.EXPAND_FRAMES);
                     passthroughDataflow.put(method, cv.getReturnTaint());
                 } catch (Exception e) {
@@ -230,18 +235,20 @@ public class PassthroughDiscovery {
         private final MethodReference.Handle methodToVisit;
         private final InheritanceMap inheritanceMap;
         private final Map<MethodReference.Handle, Set<Integer>> passthroughDataflow;
+        private final SerializableDecider serializableDecider;
 
         private String name;
         private PassthroughDataflowMethodVisitor passthroughDataflowMethodVisitor;
 
         public PassthroughDataflowClassVisitor(Map<ClassReference.Handle, ClassReference> classMap,
-                InheritanceMap inheritanceMap, Map<MethodReference.Handle, Set<Integer>> passthroughDataflow, int api,
-                MethodReference.Handle methodToVisit) {
+                InheritanceMap inheritanceMap, Map<MethodReference.Handle, Set<Integer>> passthroughDataflow,
+                SerializableDecider serializableDecider, int api, MethodReference.Handle methodToVisit) {
             super(api);
             this.classMap = classMap;
             this.inheritanceMap = inheritanceMap;
             this.methodToVisit = methodToVisit;
             this.passthroughDataflow = passthroughDataflow;
+            this.serializableDecider = serializableDecider;
         }
 
         @Override
@@ -266,7 +273,8 @@ public class PassthroughDiscovery {
 
             MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
             passthroughDataflowMethodVisitor = new PassthroughDataflowMethodVisitor(
-                    classMap, inheritanceMap, this.passthroughDataflow, api, mv, this.name, access, name, desc, signature, exceptions);
+                    classMap, inheritanceMap, this.passthroughDataflow, serializableDecider,
+                    api, mv, this.name, access, name, desc, signature, exceptions);
 
             return new JSRInlinerAdapter(passthroughDataflowMethodVisitor, access, name, desc, signature, exceptions);
         }
@@ -284,6 +292,7 @@ public class PassthroughDiscovery {
         private final Map<ClassReference.Handle, ClassReference> classMap;
         private final InheritanceMap inheritanceMap;
         private final Map<MethodReference.Handle, Set<Integer>> passthroughDataflow;
+        private final SerializableDecider serializableDecider;
 
         private final int access;
         private final String desc;
@@ -291,12 +300,13 @@ public class PassthroughDiscovery {
 
         public PassthroughDataflowMethodVisitor(Map<ClassReference.Handle, ClassReference> classMap,
                 InheritanceMap inheritanceMap, Map<MethodReference.Handle,
-                Set<Integer>> passthroughDataflow, int api, MethodVisitor mv,
+                Set<Integer>> passthroughDataflow, SerializableDecider serializableDeciderMap, int api, MethodVisitor mv,
                 String owner, int access, String name, String desc, String signature, String[] exceptions) {
             super(inheritanceMap, passthroughDataflow, api, mv, owner, access, name, desc, signature, exceptions);
             this.classMap = classMap;
             this.inheritanceMap = inheritanceMap;
             this.passthroughDataflow = passthroughDataflow;
+            this.serializableDecider = serializableDeciderMap;
             this.access = access;
             this.desc = desc;
             returnTaint = new HashSet<>();
@@ -350,21 +360,27 @@ public class PassthroughDiscovery {
                 case Opcodes.PUTSTATIC:
                     break;
                 case Opcodes.GETFIELD:
-                    int typeSize = Type.getType(desc).getSize();
-                    if (typeSize == 1) {
+                    Type type = Type.getType(desc);
+                    if (type.getSize() == 1) {
                         Boolean isTransient = null;
-                        ClassReference clazz = classMap.get(new ClassReference.Handle(owner));
-                        while (clazz != null) {
-                            for (ClassReference.Member member : clazz.getMembers()) {
-                                if (member.getName().equals(name)) {
-                                    isTransient = (member.getModifiers() & Opcodes.ACC_TRANSIENT) != 0;
+
+                        // If a field type could not possibly be serialized, it's effectively transient
+                        if (!couldBeSerialized(serializableDecider, inheritanceMap, new ClassReference.Handle(type.getInternalName()))) {
+                            isTransient = Boolean.TRUE;
+                        } else {
+                            ClassReference clazz = classMap.get(new ClassReference.Handle(owner));
+                            while (clazz != null) {
+                                for (ClassReference.Member member : clazz.getMembers()) {
+                                    if (member.getName().equals(name)) {
+                                        isTransient = (member.getModifiers() & Opcodes.ACC_TRANSIENT) != 0;
+                                        break;
+                                    }
+                                }
+                                if (isTransient != null) {
                                     break;
                                 }
+                                clazz = classMap.get(new ClassReference.Handle(clazz.getSuperClass()));
                             }
-                            if (isTransient != null) {
-                                break;
-                            }
-                            clazz = classMap.get(new ClassReference.Handle(clazz.getSuperClass()));
                         }
 
                         Set<Integer> taint;
@@ -450,7 +466,7 @@ public class PassthroughDiscovery {
         ClassLoader classLoader = Util.getWarClassLoader(Paths.get(args[0]));
 
         PassthroughDiscovery passthroughDiscovery = new PassthroughDiscovery();
-        passthroughDiscovery.discover(new ClassResourceEnumerator(classLoader));
+        passthroughDiscovery.discover(new ClassResourceEnumerator(classLoader), new JavaDeserializationConfig());
         passthroughDiscovery.save();
     }
 }

@@ -6,9 +6,17 @@ import java.util.*;
 
 public class InheritanceMap {
     private final Map<ClassReference.Handle, Set<ClassReference.Handle>> inheritanceMap;
+    private final Map<ClassReference.Handle, Set<ClassReference.Handle>> subClassMap;
 
     public InheritanceMap(Map<ClassReference.Handle, Set<ClassReference.Handle>> inheritanceMap) {
         this.inheritanceMap = inheritanceMap;
+        subClassMap = new HashMap<>();
+        for (Map.Entry<ClassReference.Handle, Set<ClassReference.Handle>> entry : inheritanceMap.entrySet()) {
+            ClassReference.Handle child = entry.getKey();
+            for (ClassReference.Handle parent : entry.getValue()) {
+                subClassMap.computeIfAbsent(parent, k -> new HashSet<>()).add(child);
+            }
+        }
     }
 
     public Set<Map.Entry<ClassReference.Handle, Set<ClassReference.Handle>>> entrySet() {
@@ -29,6 +37,14 @@ public class InheritanceMap {
             return false;
         }
         return parents.contains(superClass);
+    }
+
+    public Set<ClassReference.Handle> getSubClasses(ClassReference.Handle clazz) {
+        Set<ClassReference.Handle> subClasses = subClassMap.get(clazz);
+        if (subClasses == null) {
+            return null;
+        }
+        return Collections.unmodifiableSet(subClasses);
     }
 
     public void save() throws IOException {
