@@ -20,7 +20,7 @@ repositories {
 dependencies {
     compile "org.ow2.asm:asm:6.2"
     compile "org.ow2.asm:asm-commons:6.2"
-    compile "com.google.guava:guava:24.1-jre"
+    compile "com.google.guava:guava:26.0-jre"
     compile 'org.slf4j:slf4j-api:1.7.25'
     compile 'org.slf4j:slf4j-log4j12:1.7.25'
 
