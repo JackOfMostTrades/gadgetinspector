@@ -53,9 +53,9 @@ Other Examples
 
 If you're looking for more examples of what kind of chains this tool can find, the following libraries also have some interesting results:
 
-* http://central.maven.org/maven2/commons-beanutils/commons-beanutils/1.9.1/commons-beanutils-1.9.1.jar
 * http://central.maven.org/maven2/org/clojure/clojure/1.8.0/clojure-1.8.0.jar
 * https://mvnrepository.com/artifact/org.scala-lang/scala-library/2.12.5
+* http://central.maven.org/maven2/org/python/jython-standalone/2.5.3/jython-standalone-2.5.3.jar
 
 Don't forget that you can also point gadget inspector at a complete application (packaged as a JAR or WAR). For example, when analyzing the war for the [Zksample2](https://sourceforge.net/projects/zksample2/) application we get the following gadget chain:
 
