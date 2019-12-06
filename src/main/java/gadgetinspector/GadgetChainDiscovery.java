@@ -2,7 +2,13 @@ package gadgetinspector;
 
 import gadgetinspector.config.GIConfig;
 import gadgetinspector.config.JavaDeserializationConfig;
-import gadgetinspector.data.*;
+import gadgetinspector.data.ClassReference;
+import gadgetinspector.data.DataLoader;
+import gadgetinspector.data.GraphCall;
+import gadgetinspector.data.InheritanceDeriver;
+import gadgetinspector.data.InheritanceMap;
+import gadgetinspector.data.MethodReference;
+import gadgetinspector.data.Source;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +19,14 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class GadgetChainDiscovery {
 
@@ -302,6 +315,11 @@ public class GadgetChainDiscovery {
 
         if (inheritanceMap.isSubclassOf(method.getClassReference(), new ClassReference.Handle("groovy/lang/MetaClass"))
                 && Arrays.asList("invokeMethod", "invokeConstructor", "invokeStaticMethod").contains(method.getName())) {
+            return true;
+        }
+
+        // This jython-specific sink effectively results in RCE
+        if (method.getClassReference().getName().equals("org/python/core/PyCode") && method.getName().equals("call")) {
             return true;
         }
 
