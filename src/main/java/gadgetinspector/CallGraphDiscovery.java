@@ -32,7 +32,7 @@ public class CallGraphDiscovery {
             try (InputStream in = classResource.getInputStream()) {
                 ClassReader cr = new ClassReader(in);
                 try {
-                    cr.accept(new ModelGeneratorClassVisitor(classMap, inheritanceMap, passthroughDataflow, serializableDecider, Opcodes.ASM6),
+                    cr.accept(new ModelGeneratorClassVisitor(classMap, inheritanceMap, passthroughDataflow, serializableDecider, Opcodes.ASM7),
                             ClassReader.EXPAND_FRAMES);
                 } catch (Exception e) {
                     LOGGER.error("Error analyzing: " + classResource.getName(), e);

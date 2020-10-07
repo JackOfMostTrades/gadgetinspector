@@ -58,7 +58,7 @@ public class MethodDiscovery {
         private ClassReference.Handle classHandle;
 
         private MethodDiscoveryClassVisitor() throws SQLException {
-            super(Opcodes.ASM6);
+            super(Opcodes.ASM7);
         }
 
         @Override
