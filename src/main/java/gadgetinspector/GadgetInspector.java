@@ -92,7 +92,8 @@ public class GadgetInspector {
             urls.addAll(Util.getJarURLs(jarPaths.toArray(new Path[0])));
         }
 
-        final ClassResourceEnumerator classResourceEnumerator = new ClassResourceEnumerator(new URLClassLoader(urls.toArray(new URL[0])));
+        //we do not want a parent class loader since else the classes used by the GadgetInspector will be checked as well
+        final ClassResourceEnumerator classResourceEnumerator = new ClassResourceEnumerator(new URLClassLoader(urls.toArray(new URL[0]), null));
 
         if (!resume) {
             // Delete all existing dat files
