@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Paths;
 import java.util.*;
 
@@ -463,7 +465,7 @@ public class PassthroughDiscovery {
 
 
     public static void main(String[] args) throws Exception {
-        ClassLoader classLoader = Util.getWarClassLoader(Paths.get(args[0]));
+        ClassLoader classLoader = new URLClassLoader(Util.getExplodedWarURLs(Paths.get(args[0])).toArray(new URL[0]));
 
         PassthroughDiscovery passthroughDiscovery = new PassthroughDiscovery();
         passthroughDiscovery.discover(new ClassResourceEnumerator(classLoader), new JavaDeserializationConfig());

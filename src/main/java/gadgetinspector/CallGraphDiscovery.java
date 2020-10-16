@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.Map;
@@ -224,7 +226,7 @@ public class CallGraphDiscovery {
                         Set<String> taint = getStackTaint(stackIndex);
                         if (taint.size() > 0) {
                             for (String argSrc : taint) {
-                                if (!argSrc.substring(0, 3).equals("arg")) {
+                                if (!argSrc.startsWith("arg")) {
                                     throw new IllegalStateException("Invalid taint arg: " + argSrc);
                                 }
                                 int dotIndex = argSrc.indexOf('.');
@@ -259,7 +261,7 @@ public class CallGraphDiscovery {
     }
 
     public static void main(String[] args) throws Exception {
-        ClassLoader classLoader = Util.getWarClassLoader(Paths.get(args[0]));
+        ClassLoader classLoader = new URLClassLoader(Util.getExplodedWarURLs(Paths.get(args[0])).toArray(new URL[0]));
 
         CallGraphDiscovery callGraphDiscovery = new CallGraphDiscovery();
         callGraphDiscovery.discover(new ClassResourceEnumerator(classLoader), new JavaDeserializationConfig());
