@@ -259,11 +259,11 @@ public class GadgetChainDiscovery {
                 && method.getName().equals("forName")) {
             return true;
         }
+        */
         if (method.getClassReference().getName().equals("java/lang/Class")
-                && method.getName().equals("getMethod")) {
+                && method.getName().equals("getMethod") && argIndex == 0) {
             return true;
         }
-        */
         // If we can invoke an arbitrary method, that's probably interesting (though this doesn't assert that we
         // can control its arguments). Conversely, if we can control the arguments to an invocation but not what
         // method is being invoked, we don't mark that as interesting.

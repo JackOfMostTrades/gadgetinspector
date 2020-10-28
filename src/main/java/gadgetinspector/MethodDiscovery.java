@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -58,7 +60,7 @@ public class MethodDiscovery {
         private ClassReference.Handle classHandle;
 
         private MethodDiscoveryClassVisitor() throws SQLException {
-            super(Opcodes.ASM6);
+            super(Opcodes.ASM7);
         }
 
         @Override
@@ -116,7 +118,7 @@ public class MethodDiscovery {
     }
 
     public static void main(String[] args) throws Exception {
-        ClassLoader classLoader = Util.getWarClassLoader(Paths.get(args[0]));
+        ClassLoader classLoader = new URLClassLoader(Util.getExplodedWarURLs(Paths.get(args[0])).toArray(new URL[0]));
 
         MethodDiscovery methodDiscovery = new MethodDiscovery();
         methodDiscovery.discover(new ClassResourceEnumerator(classLoader));

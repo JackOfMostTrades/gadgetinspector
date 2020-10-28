@@ -15,7 +15,7 @@ Assuming you have a JDK installed on your system, you should be able to just run
 How to Use
 ==========
 
-This application expects as argument(s) either a path to a war file (in which case the war will be exploded and all of its classes and libraries used as a classpath) or else any number of jars.
+This application expects as argument(s) multiple war or jar files. War files will be exploded and all of its classes and libraries used as a classpath. Usually war files do not contain APIs provided by the application server so those should be added as additional jar files.
 
 Note that the analysis can be memory intensive (and so far gadget inspector has not been optimized at all to be less memory greedy). For small libraries you probably want to allocate at least 2GB of heap size (i.e. with the `-Xmx2G` flag). For larger applications you will want to use as much memory as you can spare.
 

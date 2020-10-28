@@ -8,10 +8,16 @@ import org.apache.log4j.PatternLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Main entry point for running an end-to-end analysis. Deletes all data files before starting and writes discovered
@@ -57,24 +63,37 @@ public class GadgetInspector {
             argIndex += 1;
         }
 
-        final ClassLoader classLoader;
-        if (args.length == argIndex+1 && args[argIndex].toLowerCase().endsWith(".war")) {
-            Path path = Paths.get(args[argIndex]);
-            LOGGER.info("Using WAR classpath: " + path);
-            classLoader = Util.getWarClassLoader(path);
-        } else {
-            final Path[] jarPaths = new Path[args.length - argIndex];
-            for (int i = 0; i < args.length - argIndex; i++) {
-                Path path = Paths.get(args[argIndex + i]).toAbsolutePath();
+        List<URL> urls = new ArrayList<>();
+        List<Path> jarPaths = new ArrayList<>();
+        Stream.of(args).skip(argIndex).forEach(s -> {
+            if (s.toLowerCase().endsWith(".war"))
+            {
+                Path path = Paths.get(s);
+                LOGGER.info("Using WAR classpath: " + path);
+                try {
+                    urls.addAll(Util.getExplodedWarURLs(path));
+                }
+                catch (IOException e)
+                {
+                    throw new RuntimeException(e);
+                }
+            }
+            else
+            {
+                Path path = Paths.get(s).toAbsolutePath();
                 if (!Files.exists(path)) {
                     throw new IllegalArgumentException("Invalid jar path: " + path);
                 }
-                jarPaths[i] = path;
+                jarPaths.add(path);
             }
-            LOGGER.info("Using classpath: " + Arrays.toString(jarPaths));
-            classLoader = Util.getJarClassLoader(jarPaths);
+        });
+        if (!jarPaths.isEmpty())
+        {
+            urls.addAll(Util.getJarURLs(jarPaths.toArray(new Path[0])));
         }
-        final ClassResourceEnumerator classResourceEnumerator = new ClassResourceEnumerator(classLoader);
+
+        //we do not want a parent class loader since else the classes used by the GadgetInspector will be checked as well
+        final ClassResourceEnumerator classResourceEnumerator = new ClassResourceEnumerator(new URLClassLoader(urls.toArray(new URL[0]), null));
 
         if (!resume) {
             // Delete all existing dat files

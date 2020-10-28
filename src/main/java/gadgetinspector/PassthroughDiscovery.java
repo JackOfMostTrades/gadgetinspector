@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Paths;
 import java.util.*;
 
@@ -37,7 +39,7 @@ public class PassthroughDiscovery {
             try (InputStream in = classResource.getInputStream()) {
                 ClassReader cr = new ClassReader(in);
                 try {
-                    MethodCallDiscoveryClassVisitor visitor = new MethodCallDiscoveryClassVisitor(Opcodes.ASM6);
+                    MethodCallDiscoveryClassVisitor visitor = new MethodCallDiscoveryClassVisitor(Opcodes.ASM7);
                     cr.accept(visitor, ClassReader.EXPAND_FRAMES);
                     classResourcesByName.put(visitor.getName(), classResource);
                 } catch (Exception e) {
@@ -83,7 +85,7 @@ public class PassthroughDiscovery {
                 ClassReader cr = new ClassReader(inputStream);
                 try {
                     PassthroughDataflowClassVisitor cv = new PassthroughDataflowClassVisitor(classMap, inheritanceMap,
-                            passthroughDataflow, serializableDecider, Opcodes.ASM6, method);
+                            passthroughDataflow, serializableDecider, Opcodes.ASM7, method);
                     cr.accept(cv, ClassReader.EXPAND_FRAMES);
                     passthroughDataflow.put(method, cv.getReturnTaint());
                 } catch (Exception e) {
@@ -463,7 +465,7 @@ public class PassthroughDiscovery {
 
 
     public static void main(String[] args) throws Exception {
-        ClassLoader classLoader = Util.getWarClassLoader(Paths.get(args[0]));
+        ClassLoader classLoader = new URLClassLoader(Util.getExplodedWarURLs(Paths.get(args[0])).toArray(new URL[0]));
 
         PassthroughDiscovery passthroughDiscovery = new PassthroughDiscovery();
         passthroughDiscovery.discover(new ClassResourceEnumerator(classLoader), new JavaDeserializationConfig());

@@ -8,7 +8,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLClassLoader;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,7 +22,7 @@ public class Util {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Util.class);
 
-    public static ClassLoader getWarClassLoader(Path warPath) throws IOException {
+    public static List<URL> getExplodedWarURLs(Path warPath) throws IOException {
         final Path tmpDir = Files.createTempDirectory("exploded-war");
         // Delete the temp directory at shutdown
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -63,11 +62,10 @@ public class Util {
                 throw new RuntimeException(e);
             }
         });
-        URLClassLoader classLoader = new URLClassLoader(classPathUrls.toArray(new URL[classPathUrls.size()]));
-        return classLoader;
+        return classPathUrls;
     }
 
-    public static ClassLoader getJarClassLoader(Path ... jarPaths) throws IOException {
+    public static List<URL> getJarURLs(Path ... jarPaths) throws IOException {
         final List<URL> classPathUrls = new ArrayList<>(jarPaths.length);
         for (Path jarPath : jarPaths) {
             if (!Files.exists(jarPath) || Files.isDirectory(jarPath)) {
@@ -75,8 +73,7 @@ public class Util {
             }
             classPathUrls.add(jarPath.toUri().toURL());
         }
-        URLClassLoader classLoader = new URLClassLoader(classPathUrls.toArray(new URL[classPathUrls.size()]));
-        return classLoader;
+        return classPathUrls;
     }
 
     /**
