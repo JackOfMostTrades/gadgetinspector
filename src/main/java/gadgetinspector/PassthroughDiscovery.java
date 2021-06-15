@@ -12,6 +12,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class PassthroughDiscovery {
 
@@ -73,25 +77,38 @@ public class PassthroughDiscovery {
                                                                                           InheritanceMap inheritanceMap,
                                                                                           List<MethodReference.Handle> sortedMethods,
                                                                                           SerializableDecider serializableDecider) throws IOException {
-        final Map<MethodReference.Handle, Set<Integer>> passthroughDataflow = new HashMap<>();
+        final Map<MethodReference.Handle, Set<Integer>> passthroughDataflow = new ConcurrentHashMap<>();
+        ExecutorService ex = Executors.newFixedThreadPool(4);
+
         for (MethodReference.Handle method : sortedMethods) {
             if (method.getName().equals("<clinit>")) {
                 continue;
             }
-            ClassResourceEnumerator.ClassResource classResource = classResourceByName.get(method.getClassReference().getName());
-            try (InputStream inputStream = classResource.getInputStream()) {
-                ClassReader cr = new ClassReader(inputStream);
-                try {
-                    PassthroughDataflowClassVisitor cv = new PassthroughDataflowClassVisitor(classMap, inheritanceMap,
-                            passthroughDataflow, serializableDecider, Opcodes.ASM6, method);
-                    cr.accept(cv, ClassReader.EXPAND_FRAMES);
-                    passthroughDataflow.put(method, cv.getReturnTaint());
-                } catch (Exception e) {
-                    LOGGER.error("Exception analyzing " + method.getClassReference().getName(), e);
-                }
-            } catch (IOException e) {
-                LOGGER.error("Unable to analyze " + method.getClassReference().getName(), e);
-            }
+            ex.execute(() -> {
+               ClassResourceEnumerator.ClassResource classResource = classResourceByName.get(method.getClassReference().getName());
+               try (InputStream inputStream = classResource.getInputStream()) {
+                   ClassReader cr = new ClassReader(inputStream);
+                   try {
+                       PassthroughDataflowClassVisitor cv = new PassthroughDataflowClassVisitor(classMap, inheritanceMap,
+                               passthroughDataflow, serializableDecider, Opcodes.ASM6, method);
+                       cr.accept(cv, ClassReader.EXPAND_FRAMES);
+                       passthroughDataflow.put(method, cv.getReturnTaint());
+                   } catch (Exception e) {
+                       LOGGER.error("Exception analyzing " + method.getClassReference().getName(), e);
+                   }
+               } catch (IOException e) {
+                   LOGGER.error("Unable to analyze " + method.getClassReference().getName(), e);
+               }
+            });
+        }
+
+        ex.shutdown();
+        try {
+           if (!ex.awaitTermination(300, TimeUnit.SECONDS)) {
+              ex.shutdownNow();
+           }
+        } catch (InterruptedException e) {
+           ex.shutdownNow();
         }
         return passthroughDataflow;
     }
