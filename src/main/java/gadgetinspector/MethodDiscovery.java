@@ -11,7 +11,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Paths;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -57,7 +56,7 @@ public class MethodDiscovery {
         private List<ClassReference.Member> members;
         private ClassReference.Handle classHandle;
 
-        private MethodDiscoveryClassVisitor() throws SQLException {
+        private MethodDiscoveryClassVisitor() {
             super(Opcodes.ASM6);
         }
 
