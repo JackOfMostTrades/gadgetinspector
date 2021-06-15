@@ -12,6 +12,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Set;
+import java.io.Writer;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Main entry point for running an end-to-end analysis. Deletes all data files before starting and writes discovered
@@ -118,11 +123,18 @@ public class GadgetInspector {
             sourceDiscovery.save();
         }
 
-        {
-            LOGGER.info("Searching call graph for gadget chains...");
-            GadgetChainDiscovery gadgetChainDiscovery = new GadgetChainDiscovery(config);
-            gadgetChainDiscovery.discover();
+        LOGGER.info("Searching call graph for gadget chains...");
+	     GadgetChainDiscovery gadgetChainDiscovery = new GadgetChainDiscovery(config);
+	     Set<GadgetChain> discoveredGadgets = gadgetChainDiscovery.discover();
+
+        try (OutputStream outputStream = Files.newOutputStream(Paths.get("gadget-chains.txt"));
+             Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)) {
+            for (GadgetChain chain : discoveredGadgets) {
+                chain.write(writer);
+            }
         }
+
+        LOGGER.info("Found {} gadget chains.", discoveredGadgets.size());
 
         LOGGER.info("Analysis complete!");
     }

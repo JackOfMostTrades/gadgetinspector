@@ -38,7 +38,7 @@ public class GadgetChainDiscovery {
         this.config = config;
     }
 
-    public void discover() throws Exception {
+    public Set<GadgetChain> discover() throws Exception {
         Map<MethodReference.Handle, MethodReference> methodMap = DataLoader.loadMethods();
         InheritanceMap inheritanceMap = InheritanceMap.load();
         Map<MethodReference.Handle, Set<MethodReference.Handle>> methodImplMap = InheritanceDeriver.getAllMethodImplementations(
@@ -128,72 +128,7 @@ public class GadgetChainDiscovery {
             }
         }
 
-        try (OutputStream outputStream = Files.newOutputStream(Paths.get("gadget-chains.txt"));
-             Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)) {
-            for (GadgetChain chain : discoveredGadgets) {
-                printGadgetChain(writer, chain);
-            }
-        }
-
-        LOGGER.info("Found {} gadget chains.", discoveredGadgets.size());
-    }
-
-    private static void printGadgetChain(Writer writer, GadgetChain chain) throws IOException {
-        writer.write(String.format("%s.%s%s (%d)%n",
-                chain.links.get(0).method.getClassReference().getName(),
-                chain.links.get(0).method.getName(),
-                chain.links.get(0).method.getDesc(),
-                chain.links.get(0).taintedArgIndex));
-        for (int i = 1; i < chain.links.size(); i++) {
-            writer.write(String.format("  %s.%s%s (%d)%n",
-                    chain.links.get(i).method.getClassReference().getName(),
-                    chain.links.get(i).method.getName(),
-                    chain.links.get(i).method.getDesc(),
-                    chain.links.get(i).taintedArgIndex));
-        }
-        writer.write("\n");
-    }
-
-    private static class GadgetChain {
-        private final List<GadgetChainLink> links;
-
-        private GadgetChain(List<GadgetChainLink> links) {
-            this.links = links;
-        }
-
-        private GadgetChain(GadgetChain gadgetChain, GadgetChainLink link) {
-            List<GadgetChainLink> links = new ArrayList<GadgetChainLink>(gadgetChain.links);
-            links.add(link);
-            this.links = links;
-        }
-    }
-
-    private static class GadgetChainLink {
-        private final MethodReference.Handle method;
-        private final int taintedArgIndex;
-
-        private GadgetChainLink(MethodReference.Handle method, int taintedArgIndex) {
-            this.method = method;
-            this.taintedArgIndex = taintedArgIndex;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            GadgetChainLink that = (GadgetChainLink) o;
-
-            if (taintedArgIndex != that.taintedArgIndex) return false;
-            return method != null ? method.equals(that.method) : that.method == null;
-        }
-
-        @Override
-        public int hashCode() {
-            int result = method != null ? method.hashCode() : 0;
-            result = 31 * result + taintedArgIndex;
-            return result;
-        }
+        return discoveredGadgets;
     }
 
     /*
